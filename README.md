@@ -2,7 +2,7 @@
 
 🎯 **The command-line interface for modern AI agents.** Manage, install, and execute skills directly from your terminal.
 
-Part of [SkillMaster](https://skillmaster.cc).
+Part of [SkillMaster](https://skillmaster.cc/cli).
 
 ## 📦 Installation
 
