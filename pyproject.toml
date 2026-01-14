@@ -4,35 +4,49 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-skill"
-version = "0.1.0"
-description = "CLI tool for managing AI agent skills from SkillMaster"
+version = "1.0.0"
+description = "CLI and MCP Server for managing AI agent skills from SkillMaster"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
-keywords = ["skill", "ai", "agent", "cli", "skillmaster"]
+keywords = ["skill", "ai", "agent", "cli", "mcp", "mcp-server", "skillmaster", "claude", "llm"]
 authors = [
-    { name = "SkillMaster Team" }
+    { name = "David Yang", email = "david@skillmaster.cc" }
+]
+maintainers = [
+    { name = "SkillMaster Team", email = "team@skillmaster.cc" }
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "click>=8.0",
     "httpx>=0.24",
     "rich>=13.0",
+    "mcp[cli]>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://skillmaster.cc/cli"
+Repository = "https://github.com/davidyangcool/agent-skill"
+Documentation = "https://skillmaster.cc/cli"
+Issues = "https://github.com/davidyangcool/agent-skill/issues"
 
 [project.scripts]
 skill = "agent_skill.cli:main"
+skill-mcp = "agent_skill.mcp_server:main"
 
 [project.optional-dependencies]
 dev = [
