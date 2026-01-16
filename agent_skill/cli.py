@@ -87,15 +87,29 @@ def main(ctx, version: bool, search_query: Optional[str]):
 @main.command()
 @click.argument('query')
 @click.option('--limit', '-l', default=20, help='Maximum results to show.')
-def search(query: str, limit: int):
+@click.option('--no-interactive', '-n', is_flag=True, help='Disable interactive mode.')
+def search(query: str, limit: int, no_interactive: bool):
     """
     Search for skills by keywords.
+    
+    \b
+    Interactive mode (default):
+        Search Results:
+            ↑/↓: Navigate results
+            Enter: View skill details
+            q: Quit
+        
+        Skill Details:
+            i: Install skill
+            b/Esc: Back to results
+            q: Quit
     
     \b
     Examples:
         skill search document
         skill search "python automation"
         skill search pdf --limit 10
+        skill search pdf -n              # Non-interactive mode
     """
     console.print(f"\n[dim]🔍 Searching for '[bold]{query}[/bold]'...[/dim]")
     
@@ -107,7 +121,44 @@ def search(query: str, limit: int):
             if len(skills) > limit:
                 skills = skills[:limit]
             
-            display_search_results(skills, query)
+            interactive = not no_interactive
+            current_index = 0  # Track current position
+            
+            # Interactive loop: search -> detail -> install/back
+            while True:
+                # Display search results (interactive or not), starting at current_index
+                selected_skill, current_index = display_search_results(
+                    skills, query, interactive=interactive, initial_index=current_index
+                )
+                
+                if not selected_skill:
+                    # User quit or non-interactive mode
+                    break
+                
+                # Fetch full skill details
+                console.print()  # Clear line after Live display
+                full_skill = api.get_skill(selected_skill.id)
+                
+                if not full_skill:
+                    print_error(f"Could not load skill details: {selected_skill.name}")
+                    continue
+                
+                # Show skill details with interactive options (has_back=True for search)
+                action = display_skill_detail(full_skill, interactive=interactive, has_back=True)
+                
+                if action == 'install':
+                    # Perform installation
+                    _do_install_skill(api, full_skill)
+                    # After install, return to list for more browsing
+                    console.print("\n[dim]🔙 Returning to search results...[/dim]")
+                    continue
+                elif action == 'back':
+                    # Go back to search results at the same position
+                    console.print("\n[dim]🔙 Returning to search results...[/dim]")
+                    continue
+                else:
+                    # User quit (q or None)
+                    break
             
     except httpx.HTTPStatusError as e:
         print_error(f"API Error: HTTP {e.response.status_code}")
@@ -118,6 +169,137 @@ def search(query: str, limit: int):
         print_error(f"Connection failed: {e}")
         print_info("Check your internet connection or API server availability.")
         sys.exit(1)
+
+
+def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Optional[str] = None, force: bool = True, agent: Optional[str] = None):
+    """
+    Internal function to install a skill with agent selection display.
+    
+    Flow:
+    1. Show source and agent selection
+    2. Download once to temp
+    3. Install to all selected agents
+    4. Cleanup temp and show summary
+    """
+    from .config import get_installed_skill, add_installed_skill
+    from .agents import detect_agents, get_all_agent_ids, get_agent_name, get_agent_local_path, get_agent_global_path, get_agent_install_path, AGENTS
+    from .display import display_install_step, display_agent_selection, display_install_summary
+    import tempfile
+    
+    console.print()
+    console.print(f"[bold cyan]Installing {skill.name}[/bold cyan]")
+    console.print()
+    
+    # Step 1: Show source
+    source_url = skill.source_url or f"https://skillmaster.cc/skill/{skill.id}"
+    console.print(f"[dim]Source: [blue underline]{source_url}[/blue underline][/dim]")
+    console.print()
+    
+    # Step 2: Agent selection (before download)
+    if agent:
+        # Specific agent requested - no interactive selection
+        selected_agents = [agent] if agent in AGENTS else ["claude"]
+    else:
+        # Auto-detect for default selection, then let user choose
+        detected = detect_agents()
+        if not detected:
+            detected = ["claude"]
+        
+        agents_info = []
+        for agent_id in get_all_agent_ids():
+            if global_install:
+                agent_path = get_agent_global_path(agent_id)
+            else:
+                agent_path = get_agent_local_path(agent_id)
+            agents_info.append({
+                "id": agent_id,
+                "name": get_agent_name(agent_id),
+                "path": agent_path,
+            })
+        
+        selected_agents = display_agent_selection(agents_info, detected, interactive=True)
+        
+        if not selected_agents:
+            console.print()
+            console.print("[yellow]Installation cancelled.[/yellow]")
+            return
+    
+    console.print()
+    
+    # Step 3: Download once to a temp file (in system temp dir to avoid leftover files)
+    temp_dir = Path(tempfile.gettempdir())
+    temp_zip = temp_dir / f"skill-{skill.id[:8]}.zip"
+    
+    console.print(f"[dim]Downloading from {source_url}...[/dim]")
+    
+    try:
+        with get_download_progress() as progress:
+            task = progress.add_task(f"Downloading {skill.name}", total=None)
+            
+            def update_progress(downloaded: int, total: int):
+                if total > 0:
+                    progress.update(task, total=total, completed=downloaded)
+                else:
+                    progress.update(task, advance=downloaded)
+            
+            api.download_skill_with_progress(skill.id, temp_zip, update_progress)
+    except Exception as e:
+        console.print()
+        print_error(f"Download failed: {e}")
+        if temp_zip.exists():
+            temp_zip.unlink()
+        return
+    
+    console.print()
+    
+    # Step 4: Install to each selected agent
+    install_results = []
+    
+    for agent_id in selected_agents:
+        if path:
+            install_dir = Path(path).expanduser() / skill.name
+        else:
+            install_dir = get_agent_install_path(agent_id, skill.name, global_install)
+        
+        try:
+            # Remove existing directory if force
+            if install_dir.exists():
+                shutil.rmtree(install_dir)
+            
+            install_dir.mkdir(parents=True, exist_ok=True)
+            
+            with zipfile.ZipFile(temp_zip, 'r') as zf:
+                zf.extractall(install_dir)
+            
+            # Record installation
+            installed_data = {
+                "id": skill.id,
+                "name": skill.name,
+                "installed_at": datetime.now().isoformat(),
+                "path": str(install_dir),
+                "source_url": skill.source_url,
+                "agent": agent_id,
+            }
+            add_installed_skill(f"{skill.name}@{agent_id}", installed_data)
+            
+            install_results.append({
+                "agent_name": get_agent_name(agent_id),
+                "path": str(install_dir),
+                "success": True,
+            })
+        except Exception as e:
+            install_results.append({
+                "agent_name": get_agent_name(agent_id),
+                "path": str(install_dir),
+                "success": False,
+            })
+    
+    # Step 5: Clean up temp file (in system temp dir, won't leave behind)
+    if temp_zip.exists():
+        temp_zip.unlink()
+    
+    # Step 6: Show summary
+    display_install_summary(skill.name, install_results)
 
 
 @main.command()
@@ -161,7 +343,13 @@ def show(skill_id: str):
                         skill = api.get_skill(results[0].id)
             
             if skill:
-                display_skill_detail(skill)
+                # has_back=False since show command has no list to return to
+                action = display_skill_detail(skill, has_back=False)
+                
+                # Handle interactive actions
+                if action == 'install':
+                    _do_install_skill(api, skill)
+                # None means user quit (no 'back' action for show command)
             else:
                 print_error(f"Skill not found: {skill_id}")
                 print_info("Try searching with: skill search <keywords>")
@@ -177,16 +365,25 @@ def show(skill_id: str):
 
 @main.command()
 @click.argument('skill_id')
-@click.option('--global', '-g', 'global_install', is_flag=True, help='Install to global directory (~/.claude/skills).')
+@click.option('--global', '-g', 'global_install', is_flag=True, help='Install to global directory.')
 @click.option('--path', '-p', type=click.Path(), help='Custom installation path.')
 @click.option('--force', '-f', is_flag=True, help='Overwrite if already installed.')
-def install(skill_id: str, global_install: bool, path: Optional[str], force: bool):
+@click.option('--agent', '-a', type=str, help='Specific agent to install to (opencode, claude, codex, cursor, antigravity).')
+def install(skill_id: str, global_install: bool, path: Optional[str], force: bool, agent: Optional[str]):
     """
     Download and install a skill.
     
     \b
-    By default, installs to ./.claude/skills/ (local project directory).
-    Use -g/--global to install to ~/.claude/skills/ (global directory).
+    By default, detects available agents and installs to their skill directories.
+    Use -a/--agent to specify a single agent, or -g/--global for global install.
+    
+    \b
+    Supported agents:
+      - opencode    (.opencode/skill/)
+      - claude      (.claude/skills/)
+      - codex       (.codex/skills/)
+      - cursor      (.cursor/skills/)
+      - antigravity (.agent/skills/)
     
     \b
     SKILL_ID can be:
@@ -195,9 +392,9 @@ def install(skill_id: str, global_install: bool, path: Optional[str], force: boo
     
     \b
     Examples:
-        skill install docs-generator          # Install to ./.claude/skills/
-        skill install pdf-processor -g        # Install to ~/.claude/skills/
-        skill install my-skill --path ./dir/  # Install to custom path
+        skill install docs-generator          # Auto-detect agents
+        skill install pdf-processor -g        # Install to global paths
+        skill install my-skill -a claude      # Install only to Claude Code
         skill install pdf-processor --force   # Overwrite if exists
     """
     config = load_config()
@@ -226,80 +423,8 @@ def install(skill_id: str, global_install: bool, path: Optional[str], force: boo
                 print_error(f"Skill not found: {skill_id}")
                 sys.exit(1)
             
-            console.print(f"[green]📦 Found: {skill.name}[/green]")
-            
-            # Check if already installed
-            existing = get_installed_skill(skill.name)
-            if existing and not force:
-                print_warning(f"Skill '{skill.name}' is already installed.")
-                print_info(f"Use --force to reinstall or skill uninstall {skill.name} first.")
-                sys.exit(1)
-            
-            # Determine install path
-            if path:
-                install_dir = Path(path).expanduser() / skill.name
-            else:
-                install_dir = get_skills_dir(global_install=global_install) / skill.name
-            
-            # Create temp download path
-            temp_zip = install_dir.parent / f".{skill.name}.zip.tmp"
-            
-            # Download with progress
-            console.print(f"[dim]📥 Downloading to {temp_zip}...[/dim]")
-            
-            with get_download_progress() as progress:
-                task = progress.add_task(f"Downloading {skill.name}", total=None)
-                
-                def update_progress(downloaded: int, total: int):
-                    if total > 0:
-                        progress.update(task, total=total, completed=downloaded)
-                    else:
-                        progress.update(task, advance=downloaded)
-                
-                try:
-                    api.download_skill_with_progress(skill.id, temp_zip, update_progress)
-                except httpx.HTTPStatusError as e:
-                    progress.stop()
-                    print_error(f"Download failed: HTTP {e.response.status_code}")
-                    if temp_zip.exists():
-                        temp_zip.unlink()
-                    sys.exit(1)
-            
-            # Extract ZIP
-            console.print(f"[dim]📂 Extracting to {install_dir}...[/dim]")
-            
-            # Remove existing directory if force
-            if install_dir.exists():
-                shutil.rmtree(install_dir)
-            
-            install_dir.mkdir(parents=True, exist_ok=True)
-            
-            try:
-                with zipfile.ZipFile(temp_zip, 'r') as zf:
-                    # Extract all files
-                    zf.extractall(install_dir)
-            except zipfile.BadZipFile:
-                print_error("Downloaded file is not a valid ZIP archive.")
-                if temp_zip.exists():
-                    temp_zip.unlink()
-                sys.exit(1)
-            
-            # Clean up temp file
-            if temp_zip.exists():
-                temp_zip.unlink()
-            
-            # Record installation
-            installed_data = {
-                "id": skill.id,
-                "name": skill.name,
-                "installed_at": datetime.now().isoformat(),
-                "path": str(install_dir),
-                "source_url": skill.source_url,
-            }
-            add_installed_skill(skill.name, installed_data)
-            
-            print_success(f"Successfully installed {skill.name}!")
-            console.print(f"\n[dim]📂 Location: [bold]{install_dir}[/bold][/dim]\n")
+            # Call the new install flow
+            _do_install_skill(api, skill, global_install=global_install, path=path, force=force, agent=agent)
             
     except httpx.RequestError as e:
         print_error(f"Connection failed: {e}")
