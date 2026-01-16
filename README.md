@@ -21,12 +21,29 @@ skill search "document processing"
 # View skill details
 skill show pdf
 
-# Install a skill
+# Install a skill (interactive agent selection)
 skill install pdf
 
 # List installed skills
 skill list
 ```
+
+## 🤖 Supported Agents
+
+Agent Skill supports **5 major AI coding agents** with automatic detection:
+
+| Agent | Local Path | Global Path |
+|-------|------------|-------------|
+| **OpenCode** | `.opencode/skill/` | `~/.config/opencode/skill/` |
+| **Claude Code** | `.claude/skills/` | `~/.claude/skills/` |
+| **Codex** | `.codex/skills/` | `~/.codex/skills/` |
+| **Cursor** | `.cursor/skills/` | `~/.cursor/skills/` |
+| **Antigravity** | `.agent/skills/` | `~/.gemini/antigravity/skills/` |
+
+During installation, `skill install` will:
+1. Auto-detect which agents are present in your project
+2. Show an interactive multi-select menu
+3. Install the skill to all selected agents
 
 ## 🚀 Commands Showcase
 
@@ -51,13 +68,17 @@ skill show notebooklm
 
 ### 📦 Install (`install`)
 
-One-command installation with dependency resolution.
+Interactive multi-agent installation with a single download.
 
 ```bash
-# Install to local project (./.claude/skills/)
+# Interactive: auto-detect agents and let you choose
 skill install pdf
 
-# Install to global directory (~/.claude/skills/)
+# Install to a specific agent only
+skill install pdf -a claude
+skill install pdf --agent cursor
+
+# Install to global directory
 skill install notebooklm -g
 
 # Install to custom path
@@ -68,7 +89,8 @@ skill install pdf --force
 ```
 
 **Flags:**
-- `-g, --global`: Install to `~/.claude/skills/`
+- `-a, --agent AGENT`: Install to a specific agent only (`opencode`, `claude`, `codex`, `cursor`, `antigravity`)
+- `-g, --global`: Install to global paths instead of local project
 - `-p, --path PATH`: Custom installation path
 - `-f, --force`: Overwrite if already installed
 
@@ -121,18 +143,34 @@ skill uninstall notebooklm -y  # skip confirmation
 
 ## 📂 Directory Structure
 
-```text
-~/.claude/
-├── skill-cli/
-│   ├── config.json       # User configuration
-│   └── installed.json    # Installed skills registry
-└── skills/               # Global skills (with -g flag)
-    ├── notebooklm/
-    └── pdf/
+### Config & Registry
 
-./.claude/skills/         # Local project skills (default)
-├── docx/
-└── xlsx/
+```text
+~/.claude/skill-cli/
+├── config.json       # User configuration
+└── installed.json    # Installed skills registry
+```
+
+### Skill Installation Paths
+
+**Local (default)** - installed in your project directory:
+```text
+your-project/
+├── .opencode/skill/pdf/     # OpenCode
+├── .claude/skills/pdf/      # Claude Code
+├── .codex/skills/pdf/       # Codex
+├── .cursor/skills/pdf/      # Cursor
+└── .agent/skills/pdf/       # Antigravity
+```
+
+**Global (`-g` flag)** - installed in your home directory:
+```text
+~/
+├── .config/opencode/skill/pdf/         # OpenCode
+├── .claude/skills/pdf/                 # Claude Code
+├── .codex/skills/pdf/                  # Codex
+├── .cursor/skills/pdf/                 # Cursor
+└── .gemini/antigravity/skills/pdf/     # Antigravity
 ```
 
 ## 🤖 MCP Server (AI Agent Integration)
@@ -201,17 +239,14 @@ mcp dev agent_skill/mcp_server.py
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/agent-skill.git
+git clone https://github.com/anthropics/agent-skill.git
 cd agent-skill
 
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
+# Install in editable mode
+pip install -e .
 
 # Run CLI directly
-python -m agent_skill.cli search "test"
+skill search "test"
 ```
 
 ## 📄 License
