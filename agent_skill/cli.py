@@ -152,6 +152,36 @@ def search(query: str, limit: int, no_interactive: bool):
                     # After install, return to list for more browsing
                     console.print("\n[dim]🔙 Returning to search results...[/dim]")
                     continue
+                elif action == 'view_files':
+                    # Show full directory tree
+                    if full_skill.directory_structure:
+                        console.clear()
+                        from .display import display_directory_tree, _read_key
+                        
+                        try:
+                            dir_data = json.loads(full_skill.directory_structure) if isinstance(full_skill.directory_structure, str) else full_skill.directory_structure
+                            display_directory_tree(dir_data, full_skill.name)
+                        except:
+                            console.print("[red]Could not parse directory structure.[/red]")
+                            
+                        console.print("\n[dim]Press any key to return...[/dim]")
+                        _read_key()
+                    else:
+                         console.print("[yellow]No directory structure available.[/yellow]")
+                         
+                    # Re-show detail view by looping
+                    # We need to hack the loop slightly or just let it continue to show list then re-select?
+                    # actually, 'continue' goes to list. Ideally we want to stay in detail.
+                    # Simple fix: Let's just re-display detail immediately
+                    action = display_skill_detail(full_skill, interactive=interactive, has_back=True)
+                    if action == 'install':
+                         _do_install_skill(api, full_skill)
+                         continue
+                    elif action == 'back':
+                         continue
+                    else:
+                         break
+                         
                 elif action == 'back':
                     # Go back to search results at the same position
                     console.print("\n[dim]🔙 Returning to search results...[/dim]")
@@ -183,17 +213,10 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
     """
     from .config import get_installed_skill, add_installed_skill
     from .agents import detect_agents, get_all_agent_ids, get_agent_name, get_agent_local_path, get_agent_global_path, get_agent_install_path, AGENTS
-    from .display import display_install_step, display_agent_selection, display_install_summary
+    from .display import display_install_step, display_agent_selection, display_scope_selection, display_install_summary
     import tempfile
     
-    console.print()
-    console.print(f"[bold cyan]Installing {skill.name}[/bold cyan]")
-    console.print()
-    
-    # Step 1: Show source
     source_url = skill.source_url or f"https://skillmaster.cc/skill/{skill.id}"
-    console.print(f"[dim]Source: [blue underline]{source_url}[/blue underline][/dim]")
-    console.print()
     
     # Step 2: Agent selection (before download)
     if agent:
@@ -205,12 +228,10 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
         if not detected:
             detected = ["claude"]
         
+        # Show agents with placeholder paths (will update after scope selection)
         agents_info = []
         for agent_id in get_all_agent_ids():
-            if global_install:
-                agent_path = get_agent_global_path(agent_id)
-            else:
-                agent_path = get_agent_local_path(agent_id)
+            agent_path = get_agent_local_path(agent_id)  # Show local by default
             agents_info.append({
                 "id": agent_id,
                 "name": get_agent_name(agent_id),
@@ -226,21 +247,47 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
     
     console.print()
     
+    # Step 3: Scope selection (Project or Global)
+    if not global_install and not path:
+        # Only show scope selection if not already specified via flags
+        scope = display_scope_selection(interactive=True)
+        
+        if not scope:
+            console.print()
+            console.print("[yellow]Installation cancelled.[/yellow]")
+            return
+        
+        global_install = (scope == "global")
+    
+    console.print()
+    
     # Step 3: Download once to a temp file (in system temp dir to avoid leftover files)
     temp_dir = Path(tempfile.gettempdir())
     temp_zip = temp_dir / f"skill-{skill.id[:8]}.zip"
     
-    console.print(f"[dim]Downloading from {source_url}...[/dim]")
+    # Use Panel to wrap download progress
+    from rich.live import Live
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+    from .display import display_download_panel
+    
+    download_progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+    )
     
     try:
-        with get_download_progress() as progress:
-            task = progress.add_task(f"Downloading {skill.name}", total=None)
-            
+        task = download_progress.add_task(f"Downloading {skill.name}", total=None)
+        
+        with Live(display_download_panel(skill.name, download_progress, source_url), console=console, refresh_per_second=10) as live:
             def update_progress(downloaded: int, total: int):
                 if total > 0:
-                    progress.update(task, total=total, completed=downloaded)
+                    download_progress.update(task, total=total, completed=downloaded)
                 else:
-                    progress.update(task, advance=downloaded)
+                    download_progress.update(task, advance=downloaded)
+                live.update(display_download_panel(skill.name, download_progress, source_url))
             
             api.download_skill_with_progress(skill.id, temp_zip, update_progress)
     except Exception as e:
@@ -249,8 +296,6 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
         if temp_zip.exists():
             temp_zip.unlink()
         return
-    
-    console.print()
     
     # Step 4: Install to each selected agent
     install_results = []
@@ -298,8 +343,8 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
     if temp_zip.exists():
         temp_zip.unlink()
     
-    # Step 6: Show summary
-    display_install_summary(skill.name, install_results)
+    # Step 6: Show summary with source URL in Panel title
+    display_install_summary(skill.name, install_results, source_url)
 
 
 @main.command()

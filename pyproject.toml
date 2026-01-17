@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-skill"
-version = "1.0.0"
+version = "1.0.1"
 description = "CLI and MCP Server for managing AI agent skills from SkillMaster"
 readme = "README.md"
 requires-python = ">=3.9"

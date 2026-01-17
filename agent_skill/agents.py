@@ -13,19 +13,19 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 
-# Agent configuration
+# Agent configuration (Claude Code first as default)
 AGENTS: Dict[str, Dict[str, Any]] = {
-    "opencode": {
-        "name": "OpenCode",
-        "local_path": ".opencode/skill",
-        "global_path": "~/.config/opencode/skill",
-        "detect_markers": [".opencode"],
-    },
     "claude": {
         "name": "Claude Code",
         "local_path": ".claude/skills",
         "global_path": "~/.claude/skills",
         "detect_markers": [".claude"],
+    },
+    "opencode": {
+        "name": "OpenCode",
+        "local_path": ".opencode/skill",
+        "global_path": "~/.config/opencode/skill",
+        "detect_markers": [".opencode"],
     },
     "codex": {
         "name": "Codex",
