@@ -23,8 +23,8 @@ AGENTS: Dict[str, Dict[str, Any]] = {
     },
     "opencode": {
         "name": "OpenCode",
-        "local_path": ".opencode/skill",
-        "global_path": "~/.config/opencode/skill",
+        "local_path": ".opencode/skills",
+        "global_path": "~/.config/opencode/skills",
         "detect_markers": [".opencode"],
     },
     "codex": {

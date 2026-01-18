@@ -337,6 +337,7 @@ def _do_install_skill(api, skill: Skill, global_install: bool = False, path: Opt
                 "agent_name": get_agent_name(agent_id),
                 "path": str(install_dir),
                 "success": False,
+                "error": str(e),
             })
     
     # Step 5: Clean up temp file (in system temp dir, won't leave behind)

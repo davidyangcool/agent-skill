@@ -775,14 +775,38 @@ def display_install_summary(skill_name: str, install_results: list, source_url: 
         source_url: Optional source URL for the skill
     """
     lines = []
-    lines.append(f"[bold cyan]Successfully installed {skill_name}![/bold cyan]")
+    
+    # Determine overall status
+    success_count = sum(1 for r in install_results if r['success'])
+    total_count = len(install_results)
+    
+    if success_count == total_count:
+        lines.append(f"[bold cyan]Successfully installed {skill_name}![/bold cyan]")
+    elif success_count > 0:
+        lines.append(f"[bold yellow]Partially installed {skill_name} ({success_count}/{total_count} agents)[/bold yellow]")
+    else:
+        lines.append(f"[bold red]Failed to install {skill_name}[/bold red]")
+    
     lines.append("")
     
     for result in install_results:
         if result['success']:
             lines.append(f"[green]✓[/green] [bold]{result['agent_name']}[/bold]: [blue]{result['path']}[/blue]")
         else:
-            lines.append(f"[red]✗[/red] [bold]{result['agent_name']}[/bold]: [red]Failed[/red]")
+            error_msg = result.get('error', 'Failed')
+            lines.append(f"[red]✗[/red] [bold]{result['agent_name']}[/bold]: [red]{error_msg}[/red]")
+            
+            # Add hint for permission errors
+            if "Permission denied" in error_msg:
+                # Extract path from error message and suggest the parent directory fix
+                import re
+                path_match = re.search(r"'([^']+)'", error_msg)
+                if path_match:
+                    failed_path = path_match.group(1)
+                    # Get the parent directory for chown
+                    from pathlib import Path
+                    parent_dir = str(Path(failed_path).parent)
+                    lines.append(f"  [dim yellow]💡 Fix: sudo chown -R $(whoami) {parent_dir}[/dim yellow]")
     
     # Add promotion link
     lines.append("")
