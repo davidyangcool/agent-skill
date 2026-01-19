@@ -430,6 +430,15 @@ def install(skill_id: str, global_install: bool, path: Optional[str], force: boo
       - codex       (.codex/skills/)
       - cursor      (.cursor/skills/)
       - antigravity (.agent/skills/)
+      - amp         (.agents/skills/)
+      - kilocode    (.kilocode/skills/)
+      - roocode     (.roo/skills/)
+      - goose       (.goose/skills/)
+      - gemini      (.gemini/skills/)
+      - copilot     (.github/skills/)
+      - clawdbot    (skills/)
+      - droid       (.factory/skills/)
+      - windsurf    (.windsurf/skills/)
     
     \b
     SKILL_ID can be:

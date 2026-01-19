@@ -606,8 +606,8 @@ def display_install_step(message: str, icon: str = "◇", style: str = "cyan") -
 
 def display_agent_selection(agents: list, selected_ids: list = None, interactive: bool = True) -> list:
     """
-    Display agent selection list with checkboxes in a Panel.
-    If interactive, allows ↑/↓ navigation, Space to toggle, Enter to confirm.
+    Display agent selection list with checkboxes in a Panel using a grid layout.
+    If interactive, allows ↑/↓/←/→ navigation, Space to toggle, Enter to confirm.
     
     Args:
         agents: List of agent dicts with 'id', 'name', 'path' keys
@@ -623,34 +623,56 @@ def display_agent_selection(agents: list, selected_ids: list = None, interactive
     selected = set(selected_ids)
     cursor_index = 0
     
+    # Grid configuration
+    COLS = 3
+    
     def render():
-        lines = []
-        for i, agent in enumerate(agents):
-            is_selected = agent['id'] in selected
-            is_cursor = i == cursor_index
-            
-            checkbox = "[cyan]■[/cyan]" if is_selected else "[dim]□[/dim]"
-            cursor_mark = "→ " if is_cursor else "  "
-            
-            if is_cursor:
-                name_style = "bold reverse"
-            elif is_selected:
-                name_style = "bold"
-            else:
-                name_style = "dim"
-            
-            lines.append(f"{cursor_mark}{checkbox} [{name_style}]{agent['name']}[/{name_style}]")
+        rows = []
+        # Calculate rows needed
+        import math
+        num_agents = len(agents)
+        num_rows = math.ceil(num_agents / COLS)
         
-        content = "\n".join(lines)
+        # Build grid content
+        grid_table = Table.grid(expand=True, padding=(0, 2))
+        for _ in range(COLS):
+            grid_table.add_column(ratio=1)
+            
+        for r in range(num_rows):
+            row_cells = []
+            for c in range(COLS):
+                idx = r * COLS + c
+                if idx < num_agents:
+                    agent = agents[idx]
+                    is_selected = agent['id'] in selected
+                    is_cursor = idx == cursor_index
+                    
+                    checkbox = "[cyan]■[/cyan]" if is_selected else "[dim]□[/dim]"
+                    cursor_mark = "→ " if is_cursor else "  "
+                    
+                    if is_cursor:
+                        name_style = "bold reverse"
+                    elif is_selected:
+                        name_style = "bold"
+                    else:
+                        name_style = "dim"
+                        
+                    # Truncate long names if needed, though most are short
+                    name = agent['name']
+                    cell_content = f"{cursor_mark}{checkbox} [{name_style}]{name}[/{name_style}]"
+                    row_cells.append(cell_content)
+                else:
+                    row_cells.append("")
+            grid_table.add_row(*row_cells)
         
         main_panel = Panel(
-            content,
-            title="[bold cyan]Select Agents[/bold cyan]",
+            grid_table,
+            title=f"[bold cyan]Select Agents ({len(selected)}/{len(agents)})[/bold cyan]",
             title_align="left",
             border_style="cyan",
             padding=(1, 2),
         )
-        return Group(main_panel, _render_status_bar("↑/↓: Move • Space: Toggle • Enter: Confirm"))
+        return Group(main_panel, _render_status_bar("↑/↓/←/→: Navigate • Space: Toggle • Enter: Confirm"))
     
     if not interactive or not sys.stdin.isatty():
         console.print()
@@ -668,10 +690,27 @@ def display_agent_selection(agents: list, selected_ids: list = None, interactive
                 key = _read_key()
                 
                 if key == 'up':
-                    cursor_index = (cursor_index - 1) % len(agents)
+                    cursor_index = (cursor_index - COLS)
+                    if cursor_index < 0: cursor_index += len(agents) # Wrap around vertically-ish or just stay? Let's generic wrap
+                    # Actually better wrap logic: 
+                    # If going up from top row, go to bottom row same col?
+                    # Simple list wrap:
+                    # cursor_index = (cursor_index - COLS) % len(agents) 
+                    # But this jumps columns if not perfect rectangle.
+                    # Let's simple clamp or wrap list-wise
+                    if cursor_index < 0: cursor_index = len(agents) + cursor_index # Wrap to end
                     live.update(render())
                     live.refresh()
                 elif key == 'down':
+                    cursor_index = (cursor_index + COLS)
+                    if cursor_index >= len(agents): cursor_index = cursor_index - len(agents)
+                    live.update(render())
+                    live.refresh()
+                elif key == 'left':
+                    cursor_index = (cursor_index - 1) % len(agents)
+                    live.update(render())
+                    live.refresh()
+                elif key == 'right':
                     cursor_index = (cursor_index + 1) % len(agents)
                     live.update(render())
                     live.refresh()
@@ -687,8 +726,10 @@ def display_agent_selection(agents: list, selected_ids: list = None, interactive
                 elif key == 'enter':
                     # Confirm selection
                     if not selected:
-                        # Must select at least one
-                        continue
+                        # Must select at least one? Or allow skipping?
+                        # CLI usually implies install, so empty means nothing installed. 
+                        # Return empty list is fine, main loop handles it.
+                        break
                     break
                 elif key == 'q' or key == 'escape' or key == 'ctrl+c':
                     # Cancel

@@ -45,6 +45,60 @@ AGENTS: Dict[str, Dict[str, Any]] = {
         "global_path": "~/.gemini/antigravity/skills",
         "detect_markers": [".agent", ".gemini"],
     },
+    "amp": {
+        "name": "Amp",
+        "local_path": ".agents/skills",
+        "global_path": "~/.config/agents/skills",
+        "detect_markers": [".agents"],
+    },
+    "kilocode": {
+        "name": "Kilo Code",
+        "local_path": ".kilocode/skills",
+        "global_path": "~/.kilocode/skills",
+        "detect_markers": [".kilocode"],
+    },
+    "roocode": {
+        "name": "Roo Code",
+        "local_path": ".roo/skills",
+        "global_path": "~/.roo/skills",
+        "detect_markers": [".roo"],
+    },
+    "goose": {
+        "name": "Goose",
+        "local_path": ".goose/skills",
+        "global_path": "~/.config/goose/skills",
+        "detect_markers": [".goose"],
+    },
+    "gemini": {
+        "name": "Gemini CLI",
+        "local_path": ".gemini/skills",
+        "global_path": "~/.gemini/skills",
+        "detect_markers": [".gemini"],
+    },
+    "copilot": {
+        "name": "GitHub Copilot",
+        "local_path": ".github/skills",
+        "global_path": "~/.copilot/skills",
+        "detect_markers": [".copilot", ".github"],
+    },
+    "clawdbot": {
+        "name": "Clawdbot",
+        "local_path": "skills",
+        "global_path": "~/.clawdbot/skills",
+        "detect_markers": [".clawdbot"],
+    },
+    "droid": {
+        "name": "Droid",
+        "local_path": ".factory/skills",
+        "global_path": "~/.factory/skills",
+        "detect_markers": [".factory"],
+    },
+    "windsurf": {
+        "name": "Windsurf",
+        "local_path": ".windsurf/skills",
+        "global_path": "~/.codeium/windsurf/skills",
+        "detect_markers": [".windsurf", ".codeium"],
+    },
 }
 
 
